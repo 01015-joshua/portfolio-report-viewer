@@ -1,15 +1,45 @@
 @echo off
-chcp 65001 >nul
-cd /d "%~dp0"
-where py >nul 2>nul
-if errorlevel 1 (python -m venv .venv) else (py -3 -m venv .venv)
+setlocal
+set "PYTHONUTF8=1"
+pushd "%~dp0"
+if errorlevel 1 goto folder_error
+if not exist "requirements.txt" goto incomplete
+if exist ".venv\Scripts\python.exe" goto dependencies
+py -3 -c "import sys; sys.exit(sys.version_info[:2] < (3,11))" >nul 2>nul
+if errorlevel 1 goto try_python
+py -3 -m venv .venv
 if errorlevel 1 goto failed
+goto dependencies
+:try_python
+python -c "import sys; sys.exit(sys.version_info[:2] < (3,11))" >nul 2>nul
+if errorlevel 1 goto no_python
+python -m venv .venv
+if errorlevel 1 goto failed
+:dependencies
+".venv\Scripts\python.exe" -c "import sys; sys.exit(sys.version_info[:2] < (3,11))"
+if errorlevel 1 goto no_python
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt
 if errorlevel 1 goto failed
-echo 初期設定が完了しました。start.cmd を実行してください。
+echo.
+echo Setup complete. Double-click start.cmd to open the app.
+popd
 pause
 exit /b 0
+:no_python
+echo Python 3.11 or newer was not found.
+echo Install Python and enable Add Python to PATH, then try again.
+goto failed
+:incomplete
+echo requirements.txt was not found.
+echo Extract the entire project ZIP first. Keep setup.cmd in the project folder.
+goto failed
+:folder_error
+echo Cannot open the project folder.
+pause
+exit /b 1
 :failed
-echo 初期設定に失敗しました。Python 3.11以降が必要です。README.md をご確認ください。
+echo.
+echo Setup failed. Please send a screenshot of this entire window.
+popd
 pause
 exit /b 1

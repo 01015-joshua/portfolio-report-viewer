@@ -1,0 +1,3 @@
+# Preserve Windows command files byte-for-byte, including CRLF.
+*.cmd -text
+*.bat -text
