@@ -1,12 +1,23 @@
 param([Parameter(Mandatory=$true)][string]$JobFile,[Parameter(Mandatory=$true)][string]$OutputDir)
 $ErrorActionPreference='Stop'
-$env:PATH='C:/Program Files/Bloomberg/blp/DAPI;'+$env:PATH
-Add-Type -Path 'C:/Program Files/Bloomberg/blp/API/Office Tools/Bloomberglp.Blpapi.dll'
+$roots=@('C:/blp','C:/Program Files/Bloomberg/blp','C:/Program Files (x86)/Bloomberg/blp')
+$dllPath=$null
+foreach($root in $roots){
+ $candidate=Join-Path $root 'API/Office Tools/Bloomberglp.Blpapi.dll'
+ if(Test-Path -LiteralPath $candidate -PathType Leaf){
+  $dllPath=$candidate
+  $searchPaths=@((Split-Path -Parent $candidate),(Join-Path $root 'DAPI'),$root)
+  $env:PATH=($searchPaths -join ';')+';'+$env:PATH
+  break
+ }
+}
+if(!$dllPath){throw 'BLPAPI_DLL_NOT_FOUND'}
+try {Add-Type -Path $dllPath} catch {throw 'BLPAPI_DLL_LOAD_FAILED'}
 $job=Get-Content -LiteralPath $JobFile -Raw -Encoding UTF8 | ConvertFrom-Json
-$session=[Bloomberglp.Blpapi.Session]::new()
+try {$session=[Bloomberglp.Blpapi.Session]::new()} catch {throw 'BLPAPI_DLL_LOAD_FAILED'}
 try {
- if(!$session.Start()){throw 'Bloomberg session unavailable'}
- if(!$session.OpenService('//blp/refdata')){throw 'Bloomberg reference service unavailable'}
+ if(!$session.Start()){throw 'BLPAPI_SESSION_UNAVAILABLE'}
+ if(!$session.OpenService('//blp/refdata')){throw 'BLPAPI_SERVICE_UNAVAILABLE'}
  $service=$session.GetService('//blp/refdata')
  $queue=[System.Collections.Generic.Queue[string]]::new()
  foreach($day in $job.dates){$queue.Enqueue([string]$day)}

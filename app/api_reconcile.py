@@ -11,6 +11,19 @@ from pathlib import Path
 from store import APP, SELF_START_DATE, dump
 
 
+def api_failure(process):
+    output=(process.stderr or b'')+(process.stdout or b'')
+    messages={
+        b'BLPAPI_DLL_NOT_FOUND':'Bloomberg APIのDLLが見つかりません。C:\\blp、C:\\Program Files\\Bloomberg\\blp、C:\\Program Files (x86)\\Bloomberg\\blp の API\\Office Tools を確認してください。',
+        b'BLPAPI_DLL_LOAD_FAILED':'Bloomberg APIのDLLは見つかりましたが読み込めません。依存DLL・Desktop APIの導入状態・32/64ビットの互換性を確認してください。',
+        b'BLPAPI_SESSION_UNAVAILABLE':'Bloomberg Terminalに接続できません。同じPCでTerminalにログインして再実行してください。',
+        b'BLPAPI_SERVICE_UNAVAILABLE':'Bloombergの参照データサービスに接続できません。Terminalの接続状態を確認してください。',
+    }
+    for marker,message in messages.items():
+        if marker in output:return message
+    return 'Bloomberg APIの取得に失敗しました。Terminalのログイン、ポートフォリオのアクセス権、API導入状況を確認してください。未取得を「取引なし」とは扱いません。'
+
+
 def parse_positions(text, portfolio):
     if re.search(r'responseError|securityError|fieldException\s*=|NOT_ENTITLED|NO_AUTH', text, re.I):
         raise ValueError('Bloombergがエラーを返しました。権限・対象ポートフォリオを確認してください。')
@@ -56,7 +69,7 @@ def load_positions(root, portfolio, end_date):
             except (OSError, subprocess.TimeoutExpired) as exc:
                 raise ValueError('Bloomberg APIに接続できないか、確認がタイムアウトしました。TerminalへのログインとDesktop APIの導入を確認してください。') from exc
             if process.returncode:
-                raise ValueError('Bloomberg APIの取得に失敗しました。Terminalのログイン、ポートフォリオのアクセス権、API導入状況を確認してください。未取得を「取引なし」とは扱いません。')
+                raise ValueError(api_failure(process))
             fetched={}
             for d in missing:
                 path=work/(d.replace('-','')+'.txt')
@@ -128,7 +141,7 @@ def prefill_candidates(root, portfolio, candidates):
                 capture_output=True,timeout=240,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
         except (OSError,subprocess.TimeoutExpired) as exc:
             raise ValueError('候補金額の評価データを取得できませんでした。再確認してください。') from exc
-        if process.returncode:raise ValueError('候補金額の評価データを取得できませんでした。再確認してください。')
+        if process.returncode:raise ValueError(api_failure(process))
         values={}
         for day in days:
             text=(work/(day.replace('-','')+'.txt')).read_text(encoding='utf-8-sig')
